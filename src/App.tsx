@@ -776,10 +776,30 @@ export default function App() {
 
   function downloadTemplateRaporExcel(): void {
     const subjectName = activeSubjects.find((item) => item.id === selectedRaporSubject)?.nama_mapel ?? "Mapel";
-    const rows = [
-      ["nisn", "nama", "s1", "s2", "s3", "s4", "s5", "mapel"],
-      ["1234567890", "Nama Siswa", 80, 82, 84, 86, 88, subjectName],
-    ];
+    const rows: Array<Array<string | number>> = [["nisn", "nama", "kelas", "s1", "s2", "s3", "s4", "s5", "mapel"]];
+
+    students
+      .slice()
+      .sort((a, b) => a.nama.localeCompare(b.nama))
+      .forEach((student) => {
+        const current = reportGrades.find((item) => item.student_id === student.id && item.subject_id === selectedRaporSubject);
+        rows.push([
+          student.nisn,
+          student.nama,
+          student.kelas,
+          current?.s1 ?? 0,
+          current?.s2 ?? 0,
+          current?.s3 ?? 0,
+          current?.s4 ?? 0,
+          current?.s5 ?? 0,
+          subjectName,
+        ]);
+      });
+
+    if (rows.length === 1) {
+      rows.push(["1234567890", "Nama Siswa", "6A", 80, 82, 84, 86, 88, subjectName]);
+    }
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Template Rapor");
@@ -788,10 +808,20 @@ export default function App() {
 
   function downloadTemplateUjianExcel(): void {
     const subjectName = activeSubjects.find((item) => item.id === selectedUjianSubject)?.nama_mapel ?? "Mapel";
-    const rows = [
-      ["nisn", "nama", "nilai_ujian", "mapel"],
-      ["1234567890", "Nama Siswa", 88, subjectName],
-    ];
+    const rows: Array<Array<string | number>> = [["nisn", "nama", "kelas", "nilai_ujian", "mapel"]];
+
+    students
+      .slice()
+      .sort((a, b) => a.nama.localeCompare(b.nama))
+      .forEach((student) => {
+        const current = examGrades.find((item) => item.student_id === student.id && item.subject_id === selectedUjianSubject);
+        rows.push([student.nisn, student.nama, student.kelas, current?.nilai_ujian ?? 0, subjectName]);
+      });
+
+    if (rows.length === 1) {
+      rows.push(["1234567890", "Nama Siswa", "6A", 88, subjectName]);
+    }
+
     const wb = XLSX.utils.book_new();
     const ws = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(wb, ws, "Template Ujian");
