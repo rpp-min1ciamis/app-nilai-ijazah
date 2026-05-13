@@ -159,6 +159,12 @@ function uid(prefix: string): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}_${Date.now()}`;
 }
 
+function toSafeOrder(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.floor(parsed);
+}
+
 function parseCsv(text: string): string[][] {
   return text
     .split(/\r?\n/)
@@ -624,6 +630,7 @@ export default function App() {
       ...subjectForm,
       id: subjectForm.id || uid("sub"),
       owner_id: session.id,
+      urutan: toSafeOrder(subjectForm.urutan, 1),
     };
     if (supabase) {
       const { data, error } = await supabase
@@ -799,15 +806,18 @@ export default function App() {
     if (!file || !session) return;
     const content = await file.text();
     const rows = parseCsv(content);
-    const imports = rows.slice(1).map((row) => ({
-      id: uid("sub"),
-      owner_id: session.id,
-      kode_mapel: row[0] ?? "",
-      nama_mapel: row[1] ?? "",
-      kelompok: row[2] ?? "Umum",
-      urutan: Number(row[3] ?? 1),
-      aktif: row[4] !== "false",
-    })) as Subject[];
+    const imports = rows.slice(1).map((row, index) => {
+      const fallbackOrder = subjects.length + index + 1;
+      return {
+        id: uid("sub"),
+        owner_id: session.id,
+        kode_mapel: row[0] ?? "",
+        nama_mapel: row[1] ?? "",
+        kelompok: row[2] ?? "Umum",
+        urutan: toSafeOrder(row[3], fallbackOrder),
+        aktif: (row[4] ?? "true").toLowerCase() !== "false",
+      };
+    }) as Subject[];
 
     if (supabase) {
       const { data, error } = await supabase.from(tableNames.subjects).upsert(imports).select();
