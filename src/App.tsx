@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { AnimatePresence, motion } from "framer-motion";
+import * as XLSX from "xlsx";
 import {
   BookOpen,
   Building2,
@@ -334,6 +335,8 @@ export default function App() {
 
   const fileStudentRef = useRef<HTMLInputElement>(null);
   const fileSubjectRef = useRef<HTMLInputElement>(null);
+  const fileRaporRef = useRef<HTMLInputElement>(null);
+  const fileUjianRef = useRef<HTMLInputElement>(null);
 
   const activeSubjects = useMemo(() => subjects.filter((item) => item.aktif).sort((a, b) => a.urutan - b.urutan), [subjects]);
 
@@ -771,6 +774,37 @@ export default function App() {
     downloadCsv("template-mapel.csv", [["kode_mapel", "nama_mapel", "kelompok", "urutan", "aktif"], ["MTK", "Matematika", "Umum", "1", "true"]]);
   }
 
+  function downloadTemplateRaporExcel(): void {
+    const subjectName = activeSubjects.find((item) => item.id === selectedRaporSubject)?.nama_mapel ?? "Mapel";
+    const rows = [
+      ["nisn", "nama", "s1", "s2", "s3", "s4", "s5", "mapel"],
+      ["1234567890", "Nama Siswa", 80, 82, 84, 86, 88, subjectName],
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Template Rapor");
+    XLSX.writeFile(wb, "template-nilai-rapor.xlsx");
+  }
+
+  function downloadTemplateUjianExcel(): void {
+    const subjectName = activeSubjects.find((item) => item.id === selectedUjianSubject)?.nama_mapel ?? "Mapel";
+    const rows = [
+      ["nisn", "nama", "nilai_ujian", "mapel"],
+      ["1234567890", "Nama Siswa", 88, subjectName],
+    ];
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    XLSX.utils.book_append_sheet(wb, ws, "Template Ujian");
+    XLSX.writeFile(wb, "template-nilai-ujian.xlsx");
+  }
+
+  async function parseExcelRows(file: File): Promise<Record<string, unknown>[]> {
+    const buffer = await file.arrayBuffer();
+    const wb = XLSX.read(buffer, { type: "array" });
+    const firstSheet = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: "" });
+  }
+
   async function handleStudentImport(event: FormEvent<HTMLInputElement>): Promise<void> {
     const target = event.currentTarget;
     const file = target.files?.[0];
@@ -829,6 +863,118 @@ export default function App() {
     } else {
       setSubjects((prev) => [...prev, ...imports].sort((a, b) => a.urutan - b.urutan));
     }
+    target.value = "";
+  }
+
+  async function handleRaporImportExcel(event: FormEvent<HTMLInputElement>): Promise<void> {
+    const target = event.currentTarget;
+    const file = target.files?.[0];
+    if (!file || !session || !selectedRaporSubject) return;
+
+    const rows = await parseExcelRows(file);
+    const payload: ReportGrade[] = rows
+      .map((row) => {
+        const nisn = String(row.nisn ?? "").trim();
+        const student = students.find((item) => item.nisn === nisn);
+        if (!student) return null;
+        const existed = reportGrades.find((item) => item.student_id === student.id && item.subject_id === selectedRaporSubject);
+        return {
+          id: existed?.id ?? uid("rapor"),
+          owner_id: session.id,
+          student_id: student.id,
+          subject_id: selectedRaporSubject,
+          s1: Number(row.s1 ?? 0),
+          s2: Number(row.s2 ?? 0),
+          s3: Number(row.s3 ?? 0),
+          s4: Number(row.s4 ?? 0),
+          s5: Number(row.s5 ?? 0),
+        };
+      })
+      .filter((item): item is ReportGrade => item !== null);
+
+    if (payload.length === 0) {
+      setErrorMessage("Tidak ada data rapor valid dari file Excel");
+      target.value = "";
+      return;
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from(tableNames.report)
+        .upsert(payload, { onConflict: "owner_id,student_id,subject_id" })
+        .select();
+      if (error) {
+        setErrorMessage(error.message);
+        target.value = "";
+        return;
+      }
+      const rowsSaved = data as ReportGrade[];
+      setReportGrades((prev) => {
+        const other = prev.filter((item) => item.subject_id !== selectedRaporSubject);
+        return [...other, ...rowsSaved];
+      });
+    } else {
+      setReportGrades((prev) => {
+        const other = prev.filter((item) => item.subject_id !== selectedRaporSubject);
+        return [...other, ...payload];
+      });
+    }
+
+    setErrorMessage("Import nilai rapor berhasil");
+    target.value = "";
+  }
+
+  async function handleUjianImportExcel(event: FormEvent<HTMLInputElement>): Promise<void> {
+    const target = event.currentTarget;
+    const file = target.files?.[0];
+    if (!file || !session || !selectedUjianSubject) return;
+
+    const rows = await parseExcelRows(file);
+    const payload: ExamGrade[] = rows
+      .map((row) => {
+        const nisn = String(row.nisn ?? "").trim();
+        const student = students.find((item) => item.nisn === nisn);
+        if (!student) return null;
+        const existed = examGrades.find((item) => item.student_id === student.id && item.subject_id === selectedUjianSubject);
+        return {
+          id: existed?.id ?? uid("ujian"),
+          owner_id: session.id,
+          student_id: student.id,
+          subject_id: selectedUjianSubject,
+          nilai_ujian: Number(row.nilai_ujian ?? 0),
+        };
+      })
+      .filter((item): item is ExamGrade => item !== null);
+
+    if (payload.length === 0) {
+      setErrorMessage("Tidak ada data ujian valid dari file Excel");
+      target.value = "";
+      return;
+    }
+
+    if (supabase) {
+      const { data, error } = await supabase
+        .from(tableNames.exam)
+        .upsert(payload, { onConflict: "owner_id,student_id,subject_id" })
+        .select();
+      if (error) {
+        setErrorMessage(error.message);
+        target.value = "";
+        return;
+      }
+      const rowsSaved = data as ExamGrade[];
+      setExamGrades((prev) => {
+        const other = prev.filter((item) => item.subject_id !== selectedUjianSubject);
+        return [...other, ...rowsSaved];
+      });
+    } else {
+      setExamGrades((prev) => {
+        const other = prev.filter((item) => item.subject_id !== selectedUjianSubject);
+        return [...other, ...payload];
+      });
+    }
+
+    setErrorMessage("Import nilai ujian berhasil");
     target.value = "";
   }
 
@@ -940,6 +1086,8 @@ export default function App() {
     <main className="min-h-screen bg-zinc-100 text-zinc-800">
       <input ref={fileStudentRef} type="file" className="hidden" accept=".csv" onChange={(event) => void handleStudentImport(event)} />
       <input ref={fileSubjectRef} type="file" className="hidden" accept=".csv" onChange={(event) => void handleSubjectImport(event)} />
+      <input ref={fileRaporRef} type="file" className="hidden" accept=".xlsx,.xls" onChange={(event) => void handleRaporImportExcel(event)} />
+      <input ref={fileUjianRef} type="file" className="hidden" accept=".xlsx,.xls" onChange={(event) => void handleUjianImportExcel(event)} />
 
       <AnimatePresence>
         {mobileSidebar && (
@@ -1298,6 +1446,12 @@ export default function App() {
                       <option key={subject.id} value={subject.id}>{subject.nama_mapel}</option>
                     ))}
                   </select>
+                  <button className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-700" onClick={downloadTemplateRaporExcel}>
+                    Template
+                  </button>
+                  <button className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-700" onClick={() => fileRaporRef.current?.click()}>
+                    Import Excel
+                  </button>
                   <button className={primaryButtonClassName} onClick={() => void saveRaporMassal()}>
                     Simpan
                   </button>
@@ -1357,6 +1511,12 @@ export default function App() {
                       <option key={subject.id} value={subject.id}>{subject.nama_mapel}</option>
                     ))}
                   </select>
+                  <button className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-700" onClick={downloadTemplateUjianExcel}>
+                    Template
+                  </button>
+                  <button className="rounded-full border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition hover:border-emerald-300 hover:text-emerald-700" onClick={() => fileUjianRef.current?.click()}>
+                    Import Excel
+                  </button>
                   <button className={primaryButtonClassName} onClick={() => void saveUjianMassal()}>
                     Simpan
                   </button>
