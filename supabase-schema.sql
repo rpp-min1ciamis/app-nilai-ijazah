@@ -41,6 +41,16 @@ begin
   end if;
 end $$;
 
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'report_grades' and column_name = 's5'
+  ) then
+    execute 'alter table public.report_grades drop column s5';
+  end if;
+end $$;
+
 create table if not exists public.app_settings (
   owner_id uuid primary key references auth.users(id) on delete cascade,
   nama_madrasah text not null,
@@ -91,7 +101,6 @@ create table if not exists public.report_grades (
   s2 numeric(5,2) not null default 0,
   s3 numeric(5,2) not null default 0,
   s4 numeric(5,2) not null default 0,
-  s5 numeric(5,2) not null default 0,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique(owner_id, student_id, subject_id)
