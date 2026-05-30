@@ -58,7 +58,6 @@ type ReportGrade = {
   s2: number;
   s3: number;
   s4: number;
-  s5: number;
 };
 
 type ExamGrade = {
@@ -326,7 +325,7 @@ export default function App() {
 
   const [selectedRaporSubject, setSelectedRaporSubject] = useState<string>("");
   const [selectedUjianSubject, setSelectedUjianSubject] = useState<string>("");
-  const [raporDraft, setRaporDraft] = useState<Record<string, { s1: number; s2: number; s3: number; s4: number; s5: number }>>({});
+  const [raporDraft, setRaporDraft] = useState<Record<string, { s1: number; s2: number; s3: number; s4: number }>>({});
   const [ujianDraft, setUjianDraft] = useState<Record<string, number>>({});
   const [currentPassword, setCurrentPassword] = useState<string>("");
   const [newPassword, setNewPassword] = useState<string>("");
@@ -349,7 +348,7 @@ export default function App() {
         const perMapel = activeSubjects.map((subject) => {
           const rapor = reportGrades.find((grade) => grade.student_id === student.id && grade.subject_id === subject.id);
           const ujian = examGrades.find((grade) => grade.student_id === student.id && grade.subject_id === subject.id);
-          const raporAvg = rapor ? (rapor.s1 + rapor.s2 + rapor.s3 + rapor.s4 + rapor.s5) / 5 : 0;
+          const raporAvg = rapor ? (rapor.s1 + rapor.s2 + rapor.s3 + rapor.s4) / 4 : 0;
           const ujianNilai = ujian?.nilai_ujian ?? 0;
           const finalScore = (raporAvg * settings.persen_rapor) / 100 + (ujianNilai * settings.persen_ujian) / 100;
           return { subject, nilai: Number(finalScore.toFixed(2)) };
@@ -439,7 +438,7 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedRaporSubject) return;
-    const next: Record<string, { s1: number; s2: number; s3: number; s4: number; s5: number }> = {};
+    const next: Record<string, { s1: number; s2: number; s3: number; s4: number }> = {};
     students.forEach((student) => {
       const found = reportGrades.find((row) => row.student_id === student.id && row.subject_id === selectedRaporSubject);
       next[student.id] = {
@@ -447,7 +446,6 @@ export default function App() {
         s2: found?.s2 ?? 0,
         s3: found?.s3 ?? 0,
         s4: found?.s4 ?? 0,
-        s5: found?.s5 ?? 0,
       };
     });
     setRaporDraft(next);
@@ -692,7 +690,7 @@ export default function App() {
   async function saveRaporMassal(): Promise<void> {
     if (!session || !selectedRaporSubject) return;
     const payload = students.map((student) => {
-      const draft = raporDraft[student.id] ?? { s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 };
+      const draft = raporDraft[student.id] ?? { s1: 0, s2: 0, s3: 0, s4: 0 };
       const existed = reportGrades.find((row) => row.student_id === student.id && row.subject_id === selectedRaporSubject);
       return {
         id: existed?.id ?? uid("rapor"),
@@ -703,7 +701,6 @@ export default function App() {
         s2: draft.s2,
         s3: draft.s3,
         s4: draft.s4,
-        s5: draft.s5,
       } as ReportGrade;
     });
 
@@ -776,7 +773,7 @@ export default function App() {
 
   function downloadTemplateRaporExcel(): void {
     const subjectName = activeSubjects.find((item) => item.id === selectedRaporSubject)?.nama_mapel ?? "Mapel";
-    const rows: Array<Array<string | number>> = [["nisn", "nama", "kelas", "s1", "s2", "s3", "s4", "s5", "mapel"]];
+    const rows: Array<Array<string | number>> = [["nisn", "nama", "kelas", "s1", "s2", "s3", "s4", "mapel"]];
 
     students
       .slice()
@@ -791,13 +788,12 @@ export default function App() {
           current?.s2 ?? 0,
           current?.s3 ?? 0,
           current?.s4 ?? 0,
-          current?.s5 ?? 0,
           subjectName,
         ]);
       });
 
     if (rows.length === 1) {
-      rows.push(["1234567890", "Nama Siswa", "6A", 80, 82, 84, 86, 88, subjectName]);
+      rows.push(["1234567890", "Nama Siswa", "6A", 80, 82, 84, 86, subjectName]);
     }
 
     const wb = XLSX.utils.book_new();
@@ -917,7 +913,6 @@ export default function App() {
           s2: Number(row.s2 ?? 0),
           s3: Number(row.s3 ?? 0),
           s4: Number(row.s4 ?? 0),
-          s5: Number(row.s5 ?? 0),
         };
       })
       .filter((item): item is ReportGrade => item !== null);
@@ -1426,7 +1421,7 @@ export default function App() {
                       <p className="text-xs font-semibold text-amber-700">Total bobot wajib 100%.</p>
                       <div className="grid gap-2">
                         <div className="space-y-1">
-                          <label className="text-xs font-semibold text-zinc-600">Bobot Rapor (Sem 1-5) =%</label>
+                          <label className="text-xs font-semibold text-zinc-600">Bobot Rapor (Sem 1-4) =%</label>
                           <input type="number" value={settings.persen_rapor} onChange={(event) => setSettings({ ...settings, persen_rapor: Number(event.target.value) })} className={fieldClassName} required />
                         </div>
                         <div className="space-y-1">
@@ -1493,7 +1488,7 @@ export default function App() {
                     <tr>
                       <th className="px-3 py-2 text-left">NISN</th>
                       <th className="px-3 py-2 text-left">Nama</th>
-                      {["S1", "S2", "S3", "S4", "S5"].map((semester) => (
+                      {["S1", "S2", "S3", "S4"].map((semester) => (
                         <th key={semester} className="px-3 py-2 text-center">{semester}</th>
                       ))}
                     </tr>
@@ -1503,7 +1498,7 @@ export default function App() {
                       <tr key={student.id} className="border-t">
                         <td className="px-3 py-2">{student.nisn}</td>
                         <td className="px-3 py-2">{student.nama}</td>
-                        {(["s1", "s2", "s3", "s4", "s5"] as const).map((semester) => (
+                        {(["s1", "s2", "s3", "s4"] as const).map((semester) => (
                           <td key={semester} className="px-3 py-2 text-center">
                             <input
                               type="number"
@@ -1514,7 +1509,7 @@ export default function App() {
                                 setRaporDraft((prev) => ({
                                   ...prev,
                                   [student.id]: {
-                                    ...(prev[student.id] ?? { s1: 0, s2: 0, s3: 0, s4: 0, s5: 0 }),
+                                    ...(prev[student.id] ?? { s1: 0, s2: 0, s3: 0, s4: 0 }),
                                     [semester]: Number(event.target.value),
                                   },
                                 }))
